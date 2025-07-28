@@ -1,6 +1,9 @@
 # Use an official Node.js runtime as the base image
 FROM node:24-alpine
 
+ENV DD_SERVICE="notes-frontend"
+ENV DD_ENV="dev"
+ENV DD_VERSION="0.1.0"
 # environment variables
 ENV NEXT_PUBLIC_HOST="localhost"
 ENV NEXT_PUBLIC_PORT="5000"
