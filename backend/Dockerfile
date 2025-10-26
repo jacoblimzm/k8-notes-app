@@ -1,10 +1,11 @@
-FROM python:3
+FROM python:3.9-slim
 
 ENV DD_SERVICE="notes-backend"
 ENV DD_ENV="dev"
-ENV DD_VERSION="0.1.0"
-# references the postgres container
-ENV DB_HOST="postgres-notes" 
+ENV DD_VERSION="0.2"
+
+# DB_HOST references the postgres container names
+ENV DB_HOST="postgres-notes"  
 ENV DB_PORT="5432"
 ENV DB_NAME="notesdb"
 ENV DB_USER="postgres"
@@ -20,5 +21,6 @@ COPY . /home
 
 RUN pip install -r requirements.txt
 # Run the application
-CMD ["python", "app.py"] 
-EXPOSE 5000
+# CMD ["ddtrace-run", "python", "app.py"] 
+CMD ["python", "app.py"]
+EXPOSE 5000 
