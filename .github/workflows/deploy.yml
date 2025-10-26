@@ -1,0 +1,101 @@
+name: Build and Deploy to GKE
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Allow manual trigger
+
+env:
+  PROJECT_ID: mcse-sandbox
+  GKE_CLUSTER: cluster-jake
+  GKE_ZONE: asia-southeast1-a
+  REGION: asia-southeast1
+  REPOSITORY: jake-reg
+  BACKEND_IMAGE: notes-backend-amd
+  FRONTEND_IMAGE: notes-frontend-amd
+
+jobs:
+  setup-build-publish-deploy:
+    name: Setup, Build, Publish, and Deploy
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    # Authenticate to Google Cloud
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    # Setup gcloud CLI
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    # Configure Docker to use Artifact Registry
+    - name: Configure Docker
+      run: |
+        gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
+    # Get GKE credentials
+    - name: Get GKE credentials
+      run: |
+        gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} \
+          --zone ${{ env.GKE_ZONE }} \
+          --project ${{ env.PROJECT_ID }}
+
+    # Build the Backend Docker image
+    - name: Build Backend Image
+      run: |
+        docker buildx build \
+          --platform linux/amd64 \
+          -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }} \
+          -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.BACKEND_IMAGE }}:latest \
+          ./backend
+
+    # Build the Frontend Docker image
+    - name: Build Frontend Image
+      run: |
+        docker buildx build \
+          --platform linux/amd64 \
+          -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }} \
+          -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.FRONTEND_IMAGE }}:latest \
+          ./frontend
+
+    # Push the Backend Docker image to Artifact Registry
+    - name: Push Backend Image
+      run: |
+        docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+        docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.BACKEND_IMAGE }}:latest
+
+    # Push the Frontend Docker image to Artifact Registry
+    - name: Push Frontend Image
+      run: |
+        docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+        docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.FRONTEND_IMAGE }}:latest
+
+    # Deploy to GKE
+    - name: Deploy to GKE
+      run: |
+        # Update backend deployment with new image
+        kubectl set image deployment/backend \
+          backend=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }} \
+          -n notes-app
+
+        # Update frontend deployment with new image
+        kubectl set image deployment/frontend \
+          frontend=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }} \
+          -n notes-app
+
+        # Wait for rollout to complete
+        kubectl rollout status deployment/backend -n notes-app
+        kubectl rollout status deployment/frontend -n notes-app
+
+    # Verify deployment
+    - name: Verify Deployment
+      run: |
+        kubectl get services -n notes-app
+        kubectl get pods -n notes-app
+
