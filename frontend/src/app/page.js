@@ -1,26 +1,36 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { HOST, PORT } from "./variables";
+import { HOST, PORT, BASE_URL } from "./variables";
+import { datadogRum } from "@datadog/browser-rum";
+
 
 export default function Home() {
-  
-  console.log(HOST, PORT, "HOST AND PORT IMPORT");
-  
+  console.log(HOST, PORT, "HOST AND PORT IMPORT FROM BUILD TIME");
+
   const [notes, setNotes] = useState([]);
   const [newContent, setNewContent] = useState("");
 
+  datadogRum.setUser({
+    id: "1234",
+    name: "John Doe",
+    email: "john@doe.com",
+    plan: "premium",
+  });
+
   const fetchNotes = async () => {
-    // using NEXT_PUBLIC_HOST and NEXT_PUBLIC_PORT 
+    datadogRum;
+    // using NEXT_PUBLIC_HOST and NEXT_PUBLIC_PORT
     // non NEXT_PUBLIC_* environment variables are only available in the Node.js environment, meaning they aren't accessible to the browser (the client runs in a different environment.
-    const res = await fetch(`http://${HOST}:${PORT}/notes`);
+    // const res = await fetch(`http://${HOST}:${PORT}/notes`);
+    const res = await fetch(`${BASE_URL}/notes`);
     const data = await res.json();
     setNotes(data);
   };
 
   const addNote = async () => {
     if (!newContent.trim()) return;
-    await fetch(`http://${HOST}:${PORT}/notes`, {
+    await fetch(`${BASE_URL}/notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: newContent }),
@@ -30,7 +40,7 @@ export default function Home() {
   };
 
   const deleteNote = async (id) => {
-    await fetch(`http://${HOST}:${PORT}/notes/${id}`, { method: "DELETE" });
+    await fetch(`${BASE_URL}/notes/${id}`, { method: "DELETE" });
     fetchNotes();
   };
 
