@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: notes-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: asia-southeast1-docker.pkg.dev/mcse-sandbox/jake-reg/notes-frontend-amd:v0.9
+        ports:
+        - containerPort: 3000
+        env:
+        - name: DD_ENV
+          value: "dev"
+        - name: DD_SERVICE
+          value: "notes-frontend"
+        - name: DD_VERSION
+          value: "0.2"
+        - name: NEXT_PUBLIC_HOST
+          value: "backend-service"
+        - name: NEXT_PUBLIC_PORT
+          value: "5000" 

@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-script
+  namespace: notes-app
+data:
+  "01-init.sql": |
+    -- Initialize the notes table
+    CREATE TABLE IF NOT EXISTS notes (
+        id SERIAL PRIMARY KEY,
+        content VARCHAR(255) NOT NULL
+    );
+    
+    -- Insert sample data (optional)
+    INSERT INTO notes (content) VALUES 
+        ('Welcome to your Notes App!'),
+        ('This is a sample note')
+    ON CONFLICT DO NOTHING; 
