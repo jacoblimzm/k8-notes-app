@@ -7,13 +7,13 @@ on:
   workflow_dispatch: # Allow manual trigger
 
 env:
-  PROJECT_ID: mcse-sandbox
+  DOCKERHUB_USERNAME: jacoblimzm
   GKE_CLUSTER: cluster-jake
   GKE_ZONE: asia-southeast1-a
-  REGION: asia-southeast1
-  REPOSITORY: jake-reg
+  PROJECT_ID: mcse-sandbox
   BACKEND_IMAGE: notes-backend-amd
   FRONTEND_IMAGE: notes-frontend-amd
+  NGINX_IMAGE: nginx-proxy-amd
 
 jobs:
   setup-build-publish-deploy:
@@ -24,20 +24,22 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    # Authenticate to Google Cloud
-    - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v2
+    # Login to Docker Hub
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
       with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
+        username: ${{ env.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
 
     # Setup gcloud CLI
     - name: Set up Cloud SDK
       uses: google-github-actions/setup-gcloud@v2
 
-    # Configure Docker to use Artifact Registry
-    - name: Configure Docker
-      run: |
-        gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+    # Authenticate to Google Cloud
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     # Get GKE credentials
     - name: Get GKE credentials
@@ -46,52 +48,58 @@ jobs:
           --zone ${{ env.GKE_ZONE }} \
           --project ${{ env.PROJECT_ID }}
 
-    # Build the Backend Docker image
-    - name: Build Backend Image
+    # Build and Push Backend Image
+    - name: Build and Push Backend Image
       run: |
         docker buildx build \
           --platform linux/amd64 \
-          -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }} \
-          -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.BACKEND_IMAGE }}:latest \
+          -t ${{ env.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }} \
+          -t ${{ env.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE }}:latest \
+          --push \
           ./backend
 
-    # Build the Frontend Docker image
-    - name: Build Frontend Image
+    # Build and Push Frontend Image
+    - name: Build and Push Frontend Image
       run: |
         docker buildx build \
           --platform linux/amd64 \
-          -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }} \
-          -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.FRONTEND_IMAGE }}:latest \
+          -t ${{ env.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }} \
+          -t ${{ env.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}:latest \
+          --push \
           ./frontend
 
-    # Push the Backend Docker image to Artifact Registry
-    - name: Push Backend Image
+    # Build and Push Nginx Image
+    - name: Build and Push Nginx Image
       run: |
-        docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
-        docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.BACKEND_IMAGE }}:latest
-
-    # Push the Frontend Docker image to Artifact Registry
-    - name: Push Frontend Image
-      run: |
-        docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
-        docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.FRONTEND_IMAGE }}:latest
+        docker buildx build \
+          --platform linux/amd64 \
+          -t ${{ env.DOCKERHUB_USERNAME }}/${{ env.NGINX_IMAGE }}:${{ github.sha }} \
+          -t ${{ env.DOCKERHUB_USERNAME }}/${{ env.NGINX_IMAGE }}:latest \
+          --push \
+          ./nginx
 
     # Deploy to GKE
     - name: Deploy to GKE
       run: |
         # Update backend deployment with new image
         kubectl set image deployment/backend \
-          backend=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }} \
+          backend=${{ env.DOCKERHUB_USERNAME }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }} \
           -n notes-app
 
         # Update frontend deployment with new image
         kubectl set image deployment/frontend \
-          frontend=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }} \
+          frontend=${{ env.DOCKERHUB_USERNAME }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }} \
+          -n notes-app
+
+        # Update nginx deployment with new image
+        kubectl set image deployment/nginx-proxy \
+          nginx=${{ env.DOCKERHUB_USERNAME }}/${{ env.NGINX_IMAGE }}:${{ github.sha }} \
           -n notes-app
 
         # Wait for rollout to complete
         kubectl rollout status deployment/backend -n notes-app
         kubectl rollout status deployment/frontend -n notes-app
+        kubectl rollout status deployment/nginx-proxy -n notes-app
 
     # Verify deployment
     - name: Verify Deployment
