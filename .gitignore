@@ -73,8 +73,8 @@ dist/
 *.env
 
 # ===== Kubernetes Secrets =====
-# Uncomment if you want to ignore secrets file (recommended for production)
-# k8s/secrets.yaml
+# NEVER commit actual secrets - use secrets.yaml.example as template
+k8s/secrets.yaml
 
 # ===== Docker =====
 # Docker Compose override files
